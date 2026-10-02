@@ -1,0 +1,517 @@
+import {
+  Callout,
+  Divider,
+  Grid,
+  H1,
+  H2,
+  H3,
+  Row,
+  Stack,
+  Stat,
+  Table,
+  Text,
+  useHostTheme,
+} from "cursor/canvas";
+
+type Segment = { capture: number; start: number; end: number };
+type Series = { name: string; segments: Segment[] };
+type Period = { from: number; to: number; label: string; strong?: boolean };
+
+function equalRhythm(
+  name: string,
+  captures: number,
+  rhythm: number,
+  start: number,
+): Series {
+  const segments: Segment[] = [];
+  for (let capture = 1; capture <= captures; capture++) {
+    const at = start + (capture - 1) * rhythm;
+    segments.push({ capture, start: at, end: at + rhythm });
+  }
+  return { name, segments };
+}
+
+const TASK1: Series[] = [1, 2, 3, 4].map((index) =>
+  equalRhythm(`Процесс ${index}`, 4, 4, (index - 1) * 4),
+);
+
+const TASK2: Series[] = [
+  equalRhythm("Трубопровод", 4, 3, 0),
+  equalRhythm("Демонтаж окон", 4, 1, 9),
+  equalRhythm("Окна ПВХ", 4, 3, 10),
+];
+
+const TASK2_WORKS = [
+  { name: "Замена трубопровода", rhythm: 3, start: 0 },
+  { name: "Демонтаж оконных блоков", rhythm: 1, start: 9 },
+  { name: "Установка окон ПВХ", rhythm: 3, start: 10 },
+] as const;
+
+function feb(day: number): string {
+  return `${day} фев`;
+}
+
+function Cyclogram({
+  captures,
+  captureNoun,
+  series,
+  total,
+  px,
+  ticks,
+  periods,
+  xCaption,
+}: {
+  captures: number;
+  captureNoun: string;
+  series: Series[];
+  total: number;
+  px: number;
+  ticks: number[];
+  periods?: Period[];
+  xCaption: string;
+}) {
+  const theme = useHostTheme();
+  const padL = 108;
+  const padR = 20;
+  const padT = periods ? 36 : 22;
+  const padB = 36;
+  const laneH = 42;
+  const plotBottom = padT + captures * laneH;
+  const width = padL + total * px + padR;
+  const height = plotBottom + padB;
+  const xOf = (time: number) => padL + time * px;
+  const yTop = (capture: number) => plotBottom - capture * laneH;
+  const yBot = (capture: number) => plotBottom - (capture - 1) * laneH;
+  const colorAt = (index: number) =>
+    theme.chart.sequence[index % theme.chart.sequence.length] ??
+    theme.accent.primary;
+
+  const bands = periods ?? [];
+
+  return (
+    <Stack gap={8}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        role="img"
+        aria-label={xCaption}
+        style={{ display: "block", maxWidth: width }}
+      >
+        {bands.map((period) => (
+          <g key={period.label}>
+            <rect
+              x={xOf(period.from)}
+              y={padT}
+              width={(period.to - period.from) * px}
+              height={captures * laneH}
+              fill={period.strong ? theme.fill.primary : theme.fill.tertiary}
+            />
+            <text
+              x={xOf((period.from + period.to) / 2)}
+              y={16}
+              textAnchor="middle"
+              fill={theme.text.secondary}
+              fontSize={11}
+            >
+              {period.label}
+            </text>
+          </g>
+        ))}
+
+        {Array.from({ length: captures }, (_, index) => {
+          const capture = index + 1;
+          return (
+            <g key={capture}>
+              <line
+                x1={padL}
+                x2={xOf(total)}
+                y1={yTop(capture)}
+                y2={yTop(capture)}
+                stroke={theme.stroke.tertiary}
+              />
+              <text
+                x={padL - 10}
+                y={(yTop(capture) + yBot(capture)) / 2 + 4}
+                textAnchor="end"
+                fill={theme.text.secondary}
+                fontSize={12}
+              >
+                {captureNoun} {capture}
+              </text>
+            </g>
+          );
+        })}
+
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line
+              x1={xOf(tick)}
+              x2={xOf(tick)}
+              y1={padT}
+              y2={plotBottom}
+              stroke={
+                tick === total ? theme.text.tertiary : theme.stroke.tertiary
+              }
+              strokeDasharray={tick === total ? "3 3" : undefined}
+            />
+            <text
+              x={xOf(tick)}
+              y={plotBottom + 16}
+              textAnchor="middle"
+              fill={tick === total ? theme.text.primary : theme.text.tertiary}
+              fontSize={11}
+              fontWeight={tick === total ? 600 : 400}
+            >
+              {tick === total ? `T₀ ${tick}` : tick}
+            </text>
+          </g>
+        ))}
+
+        <text
+          x={(padL + xOf(total)) / 2}
+          y={height - 6}
+          textAnchor="middle"
+          fill={theme.text.tertiary}
+          fontSize={11}
+        >
+          {xCaption}
+        </text>
+
+        {series.map((item, index) => {
+          const color = colorAt(index);
+          const points = [
+            `${xOf(item.segments[0].start)},${yBot(item.segments[0].capture)}`,
+            ...item.segments.map(
+              (segment) => `${xOf(segment.end)},${yTop(segment.capture)}`,
+            ),
+          ].join(" ");
+          const last = item.segments[item.segments.length - 1];
+          return (
+            <g key={item.name}>
+              <polyline
+                points={points}
+                fill="none"
+                stroke={color}
+                strokeWidth={2.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              <circle
+                cx={xOf(last.end)}
+                cy={yTop(last.capture)}
+                r={3.5}
+                fill={color}
+              />
+            </g>
+          );
+        })}
+      </svg>
+      <Row gap={16} wrap>
+        {series.map((item, index) => (
+          <Row key={item.name} gap={6} align="center">
+            <span
+              style={{
+                width: 18,
+                height: 3,
+                background: colorAt(index),
+                display: "inline-block",
+              }}
+            />
+            <Text size="small" tone="secondary">
+              {item.name}
+            </Text>
+          </Row>
+        ))}
+      </Row>
+    </Stack>
+  );
+}
+
+function FebruaryBars() {
+  const theme = useHostTheme();
+  const dayW = 20;
+  const rowH = 28;
+  const padL = 92;
+  const padT = 26;
+  const padB = 28;
+  const days = 22;
+  const rows = 4;
+  const width = padL + days * dayW + 16;
+  const height = padT + rows * rowH + padB;
+  const palette = theme.chart.sequence;
+  const colorAt = (index: number) =>
+    palette.length > 0
+      ? palette[index % palette.length]
+      : theme.accent.primary;
+  const xOf = (time: number) => padL + time * dayW;
+
+  return (
+    <Stack gap={8}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        role="img"
+        aria-label="Календарь ремонта по подъездам, 1–22 февраля"
+        style={{ display: "block", maxWidth: width }}
+      >
+        <text
+          x={padL}
+          y={14}
+          fill={theme.text.tertiary}
+          fontSize={11}
+        >
+          Февраль, сутки
+        </text>
+        {Array.from({ length: days }, (_, index) => {
+          const day = index + 1;
+          const show = day === 1 || day % 5 === 0 || day === 22;
+          return (
+            <text
+              key={day}
+              x={xOf(index) + dayW / 2}
+              y={padT - 8}
+              textAnchor="middle"
+              fill={day === 22 ? theme.text.primary : theme.text.tertiary}
+              fontSize={10}
+              fontWeight={day === 22 ? 600 : 400}
+            >
+              {show ? day : ""}
+            </text>
+          );
+        })}
+        {Array.from({ length: rows }, (_, index) => {
+          const entrance = index + 1;
+          const y = padT + index * rowH;
+          return (
+            <g key={entrance}>
+              <rect
+                x={padL}
+                y={y}
+                width={days * dayW}
+                height={rowH - 6}
+                fill={theme.fill.tertiary}
+              />
+              <text
+                x={padL - 8}
+                y={y + 16}
+                textAnchor="end"
+                fill={theme.text.secondary}
+                fontSize={12}
+              >
+                Подъезд {entrance}
+              </text>
+            </g>
+          );
+        })}
+        {TASK2_WORKS.map((work, workIndex) =>
+          Array.from({ length: 4 }, (_, entranceIndex) => {
+            const start = work.start + entranceIndex * work.rhythm;
+            const y = padT + entranceIndex * rowH + 3;
+            const barW = work.rhythm * dayW - 2;
+            return (
+              <g key={`${work.name}-${entranceIndex}`}>
+                <rect
+                  x={xOf(start) + 1}
+                  y={y}
+                  width={Math.max(barW, 4)}
+                  height={rowH - 12}
+                  fill={colorAt(workIndex)}
+                />
+              </g>
+            );
+          }),
+        )}
+        <text
+          x={padL + (days * dayW) / 2}
+          y={height - 8}
+          textAnchor="middle"
+          fill={theme.text.tertiary}
+          fontSize={11}
+        >
+          Календарные сутки февраля. Полоса закрывает дни работы включительно.
+        </text>
+      </svg>
+      <Row gap={16} wrap>
+        {TASK2_WORKS.map((work, index) => (
+          <Row key={work.name} gap={6} align="center">
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                background: colorAt(index),
+                display: "inline-block",
+              }}
+            />
+            <Text size="small" tone="secondary">
+              {work.name}, {work.rhythm} сут
+            </Text>
+          </Row>
+        ))}
+      </Row>
+    </Stack>
+  );
+}
+
+const scheduleRows = TASK2_WORKS.flatMap((work) =>
+  [1, 2, 3, 4].map((entrance) => {
+    const start = work.start + (entrance - 1) * work.rhythm;
+    const end = start + work.rhythm;
+    return [
+      work.name,
+      String(entrance),
+      feb(start + 1),
+      feb(end),
+      String(work.rhythm),
+    ];
+  }),
+);
+
+export default function PotokMkdRitm() {
+  return (
+    <Stack gap={24}>
+      <Stack gap={8}>
+        <H1>Поток на ремонте: ритмичность и срок T₀</H1>
+        <Text tone="secondary">
+          Две задачи с экрана. T₀ — общая продолжительность потока. На
+          циклограмме это правый конец последней линии: бригада дошла до
+          последней захватки и закончила работу.
+        </Text>
+      </Stack>
+
+      <Grid columns={2} gap={24}>
+        <Stack gap={6}>
+          <H2>Задача 1</H2>
+          <Stat value="28" label="T₀ ритмичного потока" />
+          <Text>
+            Равноритмичный поток. Параметры m = n = k = t = 4, ритм каждой
+            бригады равен шагу потока.
+          </Text>
+        </Stack>
+        <Stack gap={6}>
+          <H2>Задача 2</H2>
+          <Stat value="22 фев" label="Окончание, T₀ = 22 суток" tone="info" />
+          <Text>
+            Разноритмичный поток по четырём подъездам. Ритмы 3, 1 и 3 суток,
+            старт 1 февраля.
+          </Text>
+        </Stack>
+      </Grid>
+
+      <Divider />
+
+      <Stack gap={8}>
+        <H2>Циклограмма задачи 1</H2>
+        <Text tone="secondary" size="small">
+          Четыре захватки снизу вверх, четыре параллельных процесса. Ось X —
+          время от начала потока, сутки. Источник: условие m = n = k = t = 4.
+        </Text>
+        <Cyclogram
+          captures={4}
+          captureNoun="Захватка"
+          series={TASK1}
+          total={28}
+          px={16}
+          ticks={[0, 4, 8, 12, 16, 20, 24, 28]}
+          periods={[
+            { from: 0, to: 12, label: "Тр = 12" },
+            { from: 12, to: 16, label: "Ту = 4", strong: true },
+            { from: 16, to: 28, label: "Тсв = 12" },
+          ]}
+          xCaption="Время, сутки"
+        />
+        <Text>
+          Аналитически T₀ = k(m + n − 1) = 4 · (4 + 4 − 1) = 28. В условии
+          буквы не расшифрованы, но при m = n срок не зависит от того, какая
+          из них — число захваток, а какая — число бригад.
+        </Text>
+        <Text tone="secondary">
+          Период развёртывания Тр = 12, установившийся поток Ту = 4 (с 12-х по
+          16-е сутки работают все четыре бригады), свёртывание Тсв = 12.
+          Сумма 12 + 4 + 12 = 28 совпадает с концом циклограммы.
+        </Text>
+      </Stack>
+
+      <Divider />
+
+      <Stack gap={8}>
+        <H2>Циклограмма задачи 2</H2>
+        <Text tone="secondary" size="small">
+          Подъезд — захватка, первая снизу. Наклон линии — ритм бригады:
+          демонтаж (1 сутки) круче, трубопровод и окна ПВХ (по 3 суток) положе.
+          Разрыв по горизонтали на одной полосе — ожидание фронта, бригада при
+          этом не простаивает.
+        </Text>
+        <Cyclogram
+          captures={4}
+          captureNoun="Подъезд"
+          series={TASK2}
+          total={22}
+          px={22}
+          ticks={[0, 4, 8, 12, 16, 20, 22]}
+          xCaption="Сутки от утра 1 февраля. Отметка 22 — конец 22 февраля"
+        />
+        <H3>Аналитическая увязка</H3>
+        <Text>
+          Ритм по подъездам у каждой бригады постоянный, но между бригадами
+          разный: 3 ≠ 1 ≠ 3. Это разноритмичный поток. Ритмы кратны одним
+          суткам, поэтому он ещё и кратноритмичный.
+        </Text>
+        <Text>
+          Бригады идут без простоя, на одном подъезде работы не совмещаются.
+          Если следующая бригада быстрее, критическое сближение на последнем
+          подъезде и нужен организационный перерыв tорг = (kᵢ − kᵢ₊₁)(4 − 1).
+          Если следующая медленнее, сближение на первом подъезде и tорг = 0.
+        </Text>
+        <Table
+          headers={[
+            "Пара работ",
+            "Ритмы, сут",
+            "Критический подъезд",
+            "tорг, сут",
+            "Сдвиг начала, сут",
+          ]}
+          columnAlign={["left", "right", "right", "right", "right"]}
+          rows={[
+            ["Трубопровод → демонтаж", "3 → 1", "4", "6", "9"],
+            ["Демонтаж → окна ПВХ", "1 → 3", "1", "0", "1"],
+          ]}
+        />
+        <Text>
+          T₀ = 9 + 1 + 3 · 4 = 22 суток. Та же проверка: сумма ритмов плюс
+          перерывы плюс работа последней бригады на оставшихся подъездах,
+          (3 + 1 + 3) + 6 + 3 · 3 = 22. На графике линия окон ПВХ заканчивается
+          на 4-м подъезде в отметке 22.
+        </Text>
+      </Stack>
+
+      <Divider />
+
+      <Stack gap={8}>
+        <H2>Календарь по подъездам</H2>
+        <Text tone="secondary" size="small">
+          Старт утром 1 февраля. Окончание — конец дня 22 февраля. Ось X —
+          число февраля, ось Y — подъезд.
+        </Text>
+        <FebruaryBars />
+        <Table
+          headers={["Работа", "Подъезд", "Начало", "Окончание", "Сутки"]}
+          columnAlign={["left", "right", "right", "right", "right"]}
+          rows={scheduleRows}
+          striped
+        />
+        <Text size="small" tone="tertiary">
+          Критические стыки без зазора: трубопровод на 4-м подъезде кончается
+          12 февраля, демонтаж там начинается 13 февраля. Демонтаж на 1-м
+          подъезде идёт 10 февраля, окна ПВХ там начинаются 11 февраля.
+        </Text>
+      </Stack>
+
+      <Callout tone="info" title="Как прочитаны длительности">
+        Три срока в задаче 2 приняты на один подъезд, а не на весь дом: иначе
+        четыре подъезда не задают поток. Выходные и сменность в условии не
+        указаны, поэтому сутки идут подряд. Если у подрядчика пятидневка, в
+        рабочих днях срок тот же, 22, а календарная дата окончания сдвинется.
+      </Callout>
+    </Stack>
+  );
+}
